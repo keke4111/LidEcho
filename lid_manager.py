@@ -219,6 +219,38 @@ def process_ids_from_fields(fields: Iterable[str]) -> set[int]:
     return process_ids
 
 
+def process_parent_id(pid: int) -> int | None:
+    try:
+        with open(f"/proc/{pid}/status", "r", encoding="utf-8") as status_file:
+            for line in status_file:
+                if line.startswith("PPid:"):
+                    _, _, value = line.partition(":")
+                    value = value.strip()
+                    if value.isdigit():
+                        return int(value)
+                    return None
+    except OSError:
+        return None
+
+    return None
+
+
+def process_ancestor_ids(pid: int, max_depth: int = 8) -> list[int]:
+    ancestors: list[int] = []
+    seen = {pid}
+    current = pid
+
+    for _ in range(max_depth):
+        parent = process_parent_id(current)
+        if parent is None or parent <= 1 or parent in seen:
+            break
+        ancestors.append(parent)
+        seen.add(parent)
+        current = parent
+
+    return ancestors
+
+
 def process_cmdline(pid: int) -> str | None:
     try:
         with open(f"/proc/{pid}/cmdline", "rb") as cmdline_file:
@@ -238,6 +270,10 @@ def enrich_fields_with_process_cmdline(fields: tuple[str, ...]) -> tuple[str, ..
         cmdline = process_cmdline(pid)
         if cmdline:
             enriched.append(f"process.cmdline={cmdline}")
+        for ancestor_pid in process_ancestor_ids(pid):
+            ancestor_cmdline = process_cmdline(ancestor_pid)
+            if ancestor_cmdline:
+                enriched.append(f"process.ancestor.cmdline={ancestor_cmdline}")
 
     return tuple(enriched)
 

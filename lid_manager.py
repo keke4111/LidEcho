@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Temporarily inhibit lid suspend while YesPlayMusic is playing audio."""
+"""Temporarily inhibit lid suspend while monitored audio apps are playing."""
 
 from __future__ import annotations
 
@@ -20,7 +20,12 @@ from typing import Iterable
 import dbus
 
 
-DEFAULT_TARGETS = ("YesPlayMusic", "yesplaymusic")
+DEFAULT_TARGETS = (
+    "YesPlayMusic",
+    "lhpfahjibimgggaacnfckmefbooiklib",
+    "crx_lhpfahjibimgggaacnfckmefbooiklib",
+    "Apple Music 古典乐",
+)
 DEFAULT_POLL_INTERVAL = 5.0
 DEFAULT_RELEASE_GRACE = 30.0
 
@@ -61,7 +66,7 @@ class LidInhibitor:
         fd = inhibit(
             "handle-lid-switch",
             "LidEcho",
-            "YesPlayMusic is playing audio",
+            "Monitored audio app is playing",
             "block",
         )
         self._fd = fd.take()
@@ -200,6 +205,43 @@ def state_is_running(state: str) -> bool:
     return state in {"running", "run"}
 
 
+def process_ids_from_fields(fields: Iterable[str]) -> set[int]:
+    process_ids: set[int] = set()
+
+    for field in fields:
+        if "application.process.id" not in field:
+            continue
+        _, _, value = field.partition("=")
+        value = value.strip().strip('"')
+        if value.isdigit():
+            process_ids.add(int(value))
+
+    return process_ids
+
+
+def process_cmdline(pid: int) -> str | None:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as cmdline_file:
+            data = cmdline_file.read()
+    except OSError:
+        return None
+
+    if not data:
+        return None
+    return data.replace(b"\0", b" ").decode("utf-8", errors="replace").strip()
+
+
+def enrich_fields_with_process_cmdline(fields: tuple[str, ...]) -> tuple[str, ...]:
+    enriched = list(fields)
+
+    for pid in process_ids_from_fields(fields):
+        cmdline = process_cmdline(pid)
+        if cmdline:
+            enriched.append(f"process.cmdline={cmdline}")
+
+    return tuple(enriched)
+
+
 def fields_match_target(fields: Iterable[str], targets: tuple[str, ...]) -> bool:
     text = "\n".join(fields).lower()
     return any(target.lower() in text for target in targets)
@@ -215,7 +257,8 @@ def target_audio_is_running(targets: tuple[str, ...]) -> bool:
 
         matched_unknown_state = False
         for stream in streams:
-            if not fields_match_target(stream.fields, targets):
+            fields = enrich_fields_with_process_cmdline(stream.fields)
+            if not fields_match_target(fields, targets):
                 continue
             if state_is_running(stream.state):
                 return True
@@ -232,7 +275,7 @@ def target_audio_is_running(targets: tuple[str, ...]) -> bool:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Inhibit lid suspend only while YesPlayMusic is playing audio.",
+        description="Inhibit lid suspend only while monitored audio apps are playing.",
     )
     parser.add_argument(
         "--target",

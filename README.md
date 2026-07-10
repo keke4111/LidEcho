@@ -1,6 +1,6 @@
 # LidEcho
 
-LidEcho 是一个手动运行的 Ubuntu 合盖行为辅助脚本。它只在 YesPlayMusic 正在播放音频时，临时阻止合盖触发休眠，让音乐继续播放。
+LidEcho 是一个手动运行的 Ubuntu 合盖行为辅助脚本。它只在受监听的音频应用正在播放时，临时阻止合盖触发休眠，让音乐继续播放。
 
 它不会让屏幕继续亮着。合盖后屏幕熄灭是正常行为，脚本只处理“合盖是否进入休眠”。
 
@@ -49,7 +49,12 @@ python3 lid_manager.py
 ./lid_manager.py
 ```
 
-保持这个终端开着。播放 YesPlayMusic 时，脚本会临时阻止合盖休眠；停止播放或关闭 YesPlayMusic 后，默认等待 30 秒自动释放。
+保持这个终端开着。播放受监听应用时，脚本会临时阻止合盖休眠；停止播放或关闭应用后，默认等待 30 秒自动释放。
+
+默认监听：
+
+- YesPlayMusic
+- Apple Music 古典乐 Chrome PWA，app id: `lhpfahjibimgggaacnfckmefbooiklib`
 
 ## 右键运行
 
@@ -95,13 +100,13 @@ kill <PID>
 systemd-inhibit --list
 ```
 
-当 YesPlayMusic 正在播放并且脚本生效时，应能看到类似这一行：
+当受监听应用正在播放并且脚本生效时，应能看到类似这一行：
 
 ```text
-LidEcho  1000  keke4  <PID>  python3  handle-lid-switch  YesPlayMusic is playing audio
+LidEcho  1000  keke4  <PID>  python3  handle-lid-switch  Monitored audio app is playing
 ```
 
-如果停止播放、关闭 YesPlayMusic 或退出脚本，等待最多约 30 秒后，`LidEcho` 这一行应该消失。
+如果停止播放、关闭受监听应用或退出脚本，等待最多约 30 秒后，`LidEcho` 这一行应该消失。
 
 ## 工作原理
 
@@ -110,13 +115,13 @@ LidEcho  1000  keke4  <PID>  python3  handle-lid-switch  YesPlayMusic is playing
 ```text
 检查音频流
     ↓
-发现 YesPlayMusic 的音频流处于 RUNNING
+发现受监听应用的音频流处于 RUNNING
     ↓
 通过 D-Bus 调用 systemd-logind 的 Inhibit
     ↓
 临时阻止 handle-lid-switch
     ↓
-YesPlayMusic 停止播放或脚本退出
+受监听应用停止播放或脚本退出
     ↓
 关闭 inhibitor fd
     ↓
@@ -166,7 +171,7 @@ python3 lid_manager.py --release-grace 15
 增加匹配的应用名：
 
 ```bash
-python3 lid_manager.py --target YesPlayMusic --target yesplaymusic
+python3 lid_manager.py --target YesPlayMusic --target lhpfahjibimgggaacnfckmefbooiklib
 ```
 
 ## 系统负载
